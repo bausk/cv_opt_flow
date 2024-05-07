@@ -8,9 +8,8 @@
 
 import time
 import cv2
-from picamera2 import Picamera2
-import numpy as np
-from OpticalFlowShowcase import *
+from acquisition.video import get_camera
+from processing import optical_flow
 
 usage_text = '''
 Hit followings to switch to:
@@ -26,48 +25,39 @@ Hit 'f' to flip image horizontally.
 Hit ESC to exit.
 '''
 
-def main():
-    ## private routines
-    def change(key, prevFrame):
-        message, type = {
-            ord('1'): ('==> Dense_by_hsv', 'dense_hsv'),
-            ord('2'): ('==> Dense_by_lines', 'dense_lines'),
-            ord('3'): ('==> Dense_by_warp', 'dense_warp'),
-            ord('4'): ('==> Lucas-Kanade', 'lucas_kanade')
-        }.get(key, ('==> Dense_by_hsv', 'dense_hsv'))
-        print(message)
-        of = CreateOpticalFlow(type)
-        of.set1stFrame(prevFrame)
-        return of
-    
-    ## main starts here
-    flipImage = True
-    of = None
-    picam2 = Picamera2()
-    config = picam2.create_preview_configuration(main={"format": "RGB888"})
-    picam2.configure(config)
-    picam2.start()
-    time.sleep(1)  # wait for camera to initialize
-            
-    cv2.namedWindow("preview")
+def reset_processor(key, previous_frame):
+    message, type = {
+        ord('1'): ('==> Dense_by_hsv', 'dense_hsv'),
+        ord('2'): ('==> Dense_by_lines', 'dense_lines'),
+        ord('3'): ('==> Dense_by_warp', 'dense_warp'),
+        ord('4'): ('==> Lucas-Kanade', 'lucas_kanade')
+    }.get(key, ('==> Dense_by_hsv', 'dense_hsv'))
+    print(message)
+    of_processor = optical_flow.CreateOpticalFlow(type)
+    of_processor.set1stFrame(previous_frame)
+    return of_processor
 
-    ## main work
+
+def main():
+    flipImage = True
+    camera = get_camera()
+    cv2.namedWindow('preview')
+    processor = None
+
     for _ in range(1000):  # Adjust the range according to your needs
         # capture frame
-        array = picam2.capture_array("main")
+        frame = camera.capture()
         # frame = np.array(array.get_data(), dtype=np.uint8).reshape((array.height, array.width, 3))
-        frame = array
 
-        if of is None:
-            of = change(ord('1'), frame)
-            continue
+        if processor is None:
+            processor = reset_processor(ord('1'), frame)
 
         ### flip
         if flipImage:
             frame = cv2.flip(frame, 1)
 
         ### do it
-        img = of.apply(frame)
+        img = processor.apply(frame)
         cv2.imshow("preview", img)
 
         ### key operation
@@ -83,11 +73,11 @@ def main():
             flipImage = not flipImage
             print("Flip image: " + {True: "ON", False: "OFF"}.get(flipImage))
         elif ord('1') <= key <= ord('4'):
-            of = change(key, frame)
+            processor = reset_processor(key, frame)
 
     ## finish
-    picam2.stop()
-    cv2.destroyWindow("preview")
+    camera.destroy()
+    cv2.destroyWindow('preview')
 
 
 if __name__ == '__main__':
