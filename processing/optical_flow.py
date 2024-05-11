@@ -108,11 +108,11 @@ class LucasKanadeOpticalFlow(IOpticalFlow):
         good_old = self.p0[st==1]
 
         # draw the tracks
-        for i, (new,old) in enumerate(zip(good_new,good_old)):
-            a,b = new.ravel()
-            c,d = old.ravel()
-            self.mask = cv2.line(self.mask, (a,b), (c,d), self.color[i].tolist(), 2)
-            frame = cv2.circle(frame, (a,b), 5, self.color[i].tolist(), -1)
+        for i, (new, old) in enumerate(zip(good_new, good_old)):
+            a, b = new.ravel()
+            c, d = old.ravel()
+            self.mask = cv2.line(self.mask, (int(a), int(b)), (int(c), int(d)), self.color[i].tolist(), 2)
+            frame = cv2.circle(frame, (int(a), int(b)), 5, self.color[i].tolist(), -1)
         img = cv2.add(frame, self.mask)
 
         # Now update the previous frame and previous points

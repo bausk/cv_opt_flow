@@ -6,8 +6,10 @@
 # - http://stackoverflow.com/questions/2601194/displaying-a-webcam-feed-using-opencv-and-python
 # - http://opencv-python-tutroals.readthedocs.io/en/latest/py_tutorials/py_gui/py_video_display/py_video_display.html
 
-import time
+from typing import Optional
+import click
 import cv2
+
 from acquisition.video import get_camera
 from processing import optical_flow
 
@@ -37,10 +39,11 @@ def reset_processor(key, previous_frame):
     of_processor.set1stFrame(previous_frame)
     return of_processor
 
-
-def main():
+@click.command()
+@click.option('--image_path', required=False, type=str, help='Path to the input video file')
+def main(image_path: Optional[str]):
     flipImage = True
-    camera = get_camera()
+    camera = get_camera(image_path)
     cv2.namedWindow('preview')
     processor = None
 
