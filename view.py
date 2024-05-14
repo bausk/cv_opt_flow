@@ -41,13 +41,16 @@ def reset_processor(key, previous_frame):
 
 @click.command()
 @click.option('--image_path', required=False, type=str, help='Path to the input video file')
-def main(image_path: Optional[str]):
+@click.option('--step', required=False, type=float, help='Interval between captured frames in seconds, each frame if not specified')
+@click.option('--crop', required=False, type=float, help='Percent of HFOV to retain, 100 percent by default')
+@click.option('--maxwidth', required=False, type=int, help='Downsample to maximum width in pixels, no resize by default')
+def main(image_path: Optional[str], crop: Optional[float], maxwidth: Optional[int], step: Optional[float]):
     flipImage = True
-    camera = get_camera(image_path)
+    camera = get_camera(image_path, crop=crop, maxwidth=maxwidth)
     cv2.namedWindow('preview')
     processor = None
 
-    for _ in range(1000):  # Adjust the range according to your needs
+    while True:  # Adjust the range according to your needs
         # capture frame
         frame = camera.capture()
         # frame = np.array(array.get_data(), dtype=np.uint8).reshape((array.height, array.width, 3))
@@ -60,7 +63,7 @@ def main(image_path: Optional[str]):
             frame = cv2.flip(frame, 1)
 
         ### do it
-        img = processor.apply(frame)
+        img, _ = processor.apply(frame)
         cv2.imshow("preview", img)
 
         ### key operation

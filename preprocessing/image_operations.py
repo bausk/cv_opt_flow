@@ -11,6 +11,9 @@ def resize_cv_image_to_maxwidth(image: cv2.typing.MatLike, max_width: int) -> cv
     return image
 
 def crop_cv_image_centered(image: cv2.typing.MatLike, crop_percentage: float) -> cv2.typing.MatLike:
+    if crop_percentage == 1:
+        return image
+
     # Get the dimensions of the original image
     height, width = image.shape[:2]
 

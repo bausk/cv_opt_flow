@@ -1,15 +1,34 @@
+from typing import Optional
+import click
 import cv2
 import math
 import os
 
+from preprocessing.image_operations import crop_cv_image_centered, resize_cv_image_to_maxwidth
+
 
 class MP4VideoSlicer:
-    def __init__(self, video_path, autoincrement=True, increment=None) -> None:
+    def __init__(self, video_path, autoincrement=True, increment=None, crop_factor=1.0, resize_maxwidth=None) -> None:
         capture_source = cv2.VideoCapture(video_path)
+        self.crop_factor = crop_factor
+        self.resize_maxwidth = resize_maxwidth
         self.video_fps: float = capture_source.get(cv2.CAP_PROP_FPS)
         self.total_frames: int = int(capture_source.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.video_width_px = int(capture_source.get(3))
-        self.video_height_px = int(capture_source.get(4))
+        width = int(capture_source.get(3))
+        height = int(capture_source.get(4))
+
+        is_should_resize = resize_maxwidth is not None and width > resize_maxwidth
+        self.should_preprocess = True if is_should_resize or crop_factor != 1 else False
+
+        if is_should_resize:
+            scale_factor = resize_maxwidth / width
+            resized_height = int(height * scale_factor)
+            self.video_width_px = resize_maxwidth
+            self.video_height_px = resized_height
+        else:
+            self.video_width_px = width
+            self.video_height_px = height
+
         self.capture_source = capture_source
         self.next_step_seconds = 0.0
         self.frame_count = 0
@@ -39,6 +58,8 @@ class MP4VideoSlicer:
             self.capture_source.set(cv2.CAP_PROP_POS_FRAMES, next_frame_count)
             ret, frame = self.capture_source.read()
 
+        if self.should_preprocess:
+            frame = resize_cv_image_to_maxwidth(crop_cv_image_centered(frame, self.crop_factor), max_width=self.video_width_px)
         self.frame_count = next_frame_count
         return ret, frame
     
@@ -47,36 +68,40 @@ class MP4VideoSlicer:
 
 
 class MP4VideoPreprocessor(MP4VideoSlicer):
-    def process(self):
-        print(self.video_width_px, self.video_fps, self.video_height_px)
-        self.video_out = cv2.VideoWriter(
-            'output.mp4',
-            cv2.VideoWriter.fourcc(*'mp4v'),
-            self.video_fps,
-            (self.video_width_px, self.video_height_px)
-        )
+    def process(self, output_format: Optional[str]):
+        if output_format is not None:
+            path = f'outputs'
+            folder = f'{self.video_width_px}x{self.video_height_px}'
 
-        path = f'outputs'
-        folder = f'{self.video_width_px}x{self.video_height_px}'
-        try:
-            os.mkdir(path)
-        except FileExistsError:
-            pass
-        os.chdir(path)
-        try:
-            os.mkdir(folder)
-        except FileExistsError:
-            pass
-        os.chdir(folder)        
+            try:
+                os.mkdir(path)
+            except FileExistsError:
+                pass
+            os.chdir(path)
+            try:
+                os.mkdir(folder)
+            except FileExistsError:
+                pass
+            os.chdir(folder)        
+
+            if output_format in ['VIDEO', 'ALL']:
+                self.video_out = cv2.VideoWriter(
+                    'output.mp4',
+                    cv2.VideoWriter.fourcc(*'mp4v'),
+                    self.video_fps,
+                    (self.video_width_px, self.video_height_px)
+                )
 
         for ret, frame in self:
             if ret:
-                self.video_out.write(frame)
-                current_frame_time_seconds = self.frame_count / self.video_fps
-                hours = int(current_frame_time_seconds // 3600)
-                minutes = int((current_frame_time_seconds % 3600) // 60)
-                seconds = int(current_frame_time_seconds % 60)
-                milliseconds = int((current_frame_time_seconds - int(current_frame_time_seconds)) * 1000)
-                filename = f'output_{self.video_width_px}x{self.video_height_px}_{hours:02d}_{minutes:02d}_{seconds:02d}_{milliseconds:03d}.jpg'
-                cv2.imwrite(filename, frame)
+                if output_format in ['VIDEO', 'ALL']:
+                    self.video_out.write(frame)
+                if output_format in ['JPG', 'ALL']:
+                    current_frame_time_seconds = self.frame_count / self.video_fps
+                    hours = int(current_frame_time_seconds // 3600)
+                    minutes = int((current_frame_time_seconds % 3600) // 60)
+                    seconds = int(current_frame_time_seconds % 60)
+                    milliseconds = int((current_frame_time_seconds - int(current_frame_time_seconds)) * 1000)
+                    filename = f'output_{self.video_width_px}x{self.video_height_px}_{hours:02d}_{minutes:02d}_{seconds:02d}_{milliseconds:03d}.jpg'
+                    cv2.imwrite(filename, frame)
         self.video_out.release()

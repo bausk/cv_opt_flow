@@ -7,6 +7,7 @@
 # - http://opencv-python-tutroals.readthedocs.io/en/latest/py_tutorials/py_gui/py_video_display/py_video_display.html
 
 import time
+from typing import Optional
 import cv2
 
 from preprocessing.video_slicing import MP4VideoSlicer
@@ -14,15 +15,24 @@ from preprocessing.image_operations import crop_cv_image_centered, resize_cv_ima
 
 
 class BaseVideoInput:
+    def _initialize_preprocess_frame(self, crop_factor: float = 1, resize_maxwidth: Optional[int] = None) -> None:
+        self.crop_factor = crop_factor
+        self.resize_maxwidth = resize_maxwidth
+
     def capture(self) -> cv2.typing.MatLike:
         raise NotImplementedError('implement capture function')
+
+    def preprocess_frame(self, frame: cv2.typing.MatLike) -> cv2.typing.MatLike:
+        cropped = frame if self.crop_factor is None else crop_cv_image_centered(frame, self.crop_factor)
+        resized = frame if self.resize_maxwidth is None else resize_cv_image_to_maxwidth(cropped, max_width=self.resize_maxwidth)
+        return resized
 
     def destroy(self):
         pass
 
 
 class PiCameraLiveInput(BaseVideoInput):
-    def __init__(self) -> None:
+    def __init__(self, crop_factor: float, resize_hfov: int) -> None:
         from picamera2 import Picamera2
         picam2 = Picamera2()
         config = picam2.create_preview_configuration(main={'format': 'RGB888'})
@@ -30,10 +40,11 @@ class PiCameraLiveInput(BaseVideoInput):
         picam2.start()
         time.sleep(1)  # wait for camera to initialize
         self.camera = picam2
+        self._initialize_preprocess_frame(crop_factor, resize_hfov)
 
     def capture(self):
         array = self.camera.capture_array('main')
-        return array
+        return self.preprocess_frame(array)
 
     def destroy(self):
         self.camera.stop()
@@ -41,25 +52,33 @@ class PiCameraLiveInput(BaseVideoInput):
 
 
 class RecordedVideoInput(BaseVideoInput):
-    def __init__(self, video_url) -> None:
+    def __init__(self, video_url: str, crop_factor: Optional[float] = 1, resize_maxwidth: Optional[int] = None) -> None:
         super().__init__()
         self._video_url = video_url
         self.videoslicer = MP4VideoSlicer(video_url)
         self.is_started = False
         self.last_timestamp = None
+        self._initialize_preprocess_frame(crop_factor, resize_maxwidth)
 
     def capture(self):
         new_timestamp = time.time()
+        message = ''
         if self.last_timestamp is None:
             self.last_timestamp = new_timestamp
+            difference_seconds = 0.001
         else:
-            difference = new_timestamp - self.last_timestamp
-            print(f'{(1/difference):02f}', end='\r')
+            difference_seconds = new_timestamp - self.last_timestamp
+            message += f'Overall FPS: {(1/difference_seconds):02f}. '
             self.last_timestamp = new_timestamp
-            self.videoslicer.next_step_seconds = difference
+            self.videoslicer.next_step_seconds = difference_seconds
         try:
             rval, frame = next(self.videoslicer)
-            return resize_cv_image_to_maxwidth(crop_cv_image_centered(frame, 1), max_width=400)
+            image = self.preprocess_frame(frame)
+            timestamp_after_extraction = time.time()
+            algo_difference_seconds = difference_seconds - (timestamp_after_extraction - new_timestamp)
+            message += f'Algorith part is: {(algo_difference_seconds / difference_seconds * 100):02f}. '
+            print(message, end='\r')
+            return image
         except Exception as e:
             self.videoslicer.cleanup()
             raise e
@@ -82,11 +101,11 @@ class DefaultCameraVideoInput(BaseVideoInput):
         return frame
 
 
-def get_camera(video_url=None) -> BaseVideoInput:
+def get_camera(video_url=None, crop=None, maxwidth=None) -> BaseVideoInput:
     try:
         return PiCameraLiveInput()
     except Exception:
         if video_url:
-            return RecordedVideoInput(video_url)
+            return RecordedVideoInput(video_url, crop_factor=crop, resize_maxwidth=maxwidth)
         else:
             return DefaultCameraVideoInput()

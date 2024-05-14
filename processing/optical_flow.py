@@ -20,7 +20,7 @@ class IOpticalFlow:
         '''Apply and return result display image (expected to be new object)'''
         result = frame.copy()
         self.prev = frame
-        return result
+        return result, None
 
 class DenseOpticalFlow(IOpticalFlow):
     '''Abstract class for DenseOpticalFlow expressions'''
@@ -37,7 +37,7 @@ class DenseOpticalFlow(IOpticalFlow):
 
         result = self.makeResult(next, flow)
         self.prev = next
-        return result
+        return result, flow
 
     def makeResult(self, grayFrame, flow):
         '''Replace this for each expression'''
@@ -52,7 +52,7 @@ class DenseOpticalFlowByHSV(DenseOpticalFlow):
 
 class DenseOpticalFlowByLines(DenseOpticalFlow):
     def __init__(self):
-        self.step = 16 # configure this if you need other steps...
+        self.step = 64 # configure this if you need other steps...
 
     def makeResult(self, grayFrame, flow):
         h, w = grayFrame.shape[:2]
@@ -119,7 +119,7 @@ class LucasKanadeOpticalFlow(IOpticalFlow):
         self.old_gray = frame_gray.copy()
         self.p0 = good_new.reshape(-1,1,2)
 
-        return img
+        return img, p1
 
 
 def CreateOpticalFlow(type):
