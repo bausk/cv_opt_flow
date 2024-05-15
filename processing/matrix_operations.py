@@ -4,6 +4,19 @@ import numpy as np
 
 def calculate_rotation_translation(matrix: np.ndarray):
     # Step 1: Compute the centroid
+    # Compute the vector lengths
+    vector_lengths = np.linalg.norm(matrix, axis=2)
+    # Find the threshold value corresponding to the 90th percentile
+    threshold = np.percentile(vector_lengths.flatten(), 90)
+    # Create a mask to filter values based on the threshold
+    mask = vector_lengths > threshold
+
+    # Apply the mask to the matrix along the last axis
+    filtered_matrix = np.where(mask[..., np.newaxis], matrix, np.nan)
+    # Calculate the centroid using the filtered matrix
+    centroid = np.nanmean(filtered_matrix, axis=(0, 1))
+    # End of sparse implementation
+
     centroid = np.mean(matrix, axis=(0, 1))
 
     # Step 2: Translate the points to the centroid
